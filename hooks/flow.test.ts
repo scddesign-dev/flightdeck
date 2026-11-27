@@ -195,11 +195,16 @@ test('the session context fill lands on main; no reading yet or unchanged writes
   expect(setContext(f, { window: 200_000 })).toBe(f)
 })
 
-test('a stopped or failed task wins over the loop status, answered or not', () => {
+test('a task stopped before it answered, or failed, wins over the loop status', () => {
   let f = addAgent(emptyFlow(0), spawn('a'), 1)
-  f = setOutput(f, 'a', 'partial', 2)
+  // TaskStop mid-work ends its turn with an empty answer: killed.
+  f = setOutput(f, 'a', '', 2)
   f = setStatuses(f, [{ id: 'a', status: 'idle', taskStatus: 'killed' }], 3)
   expect(f.nodes[1]).toMatchObject({ status: 'killed', endedAt: 2 })
+  // A teammate that answered, then is released by TaskStop, stays completed.
+  let t = setOutput(addAgent(emptyFlow(0), spawn('t'), 1), 't', 'found 4', 2)
+  t = setStatuses(t, [{ id: 't', status: 'idle', taskStatus: 'killed' }], 3)
+  expect(t.nodes[1]!.status).toBe('completed')
   const g = setStatuses(addAgent(emptyFlow(0), spawn('b'), 1), [{ id: 'b', status: 'completed', taskStatus: 'failed' }], 4)
   expect(g.nodes[1]).toMatchObject({ status: 'failed', endedAt: 4 })
 })

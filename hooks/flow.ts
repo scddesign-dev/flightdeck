@@ -129,14 +129,16 @@ export function endAgentTasks(f: Flow, agent: string, now: number): Flow {
 // A background agent that answered stays listed as 'idle' while SendMessage can
 // resume it: after its answer that is finished, not live; a resume reports 'running'.
 // Each listed agent's context fill comes along; one with no window keeps its last.
-// A stopped (TaskStop) or failed task shows only in taskStatus; that wins.
+// A stopped (TaskStop) or failed task shows only in taskStatus; that wins. A
+// teammate that answered and is then released by TaskStop stays completed:
+// killed counts only while it has no answer (stopped mid-work answers '').
 type Listed = { id: string; status: string; taskStatus?: string; tokenCount?: number; contextWindowSize?: number }
 export function setStatuses(f: Flow, list: readonly Listed[], now: number): Flow {
   const by = new Map(list.map(a => [a.id, a]))
   let changed = false
   const nodes = f.nodes.map(n => {
     const a = by.get(n.id)
-    const listed = a?.taskStatus === 'killed' || a?.taskStatus === 'failed' ? a.taskStatus : a?.status
+    const listed = a?.taskStatus === 'failed' || (a?.taskStatus === 'killed' && !n.output) ? a.taskStatus : a?.status
     // Listed idle, or dropped from the list while idle: an answered agent is finished.
     const s = (listed ?? n.status) === 'idle' && n.output !== undefined ? 'completed' : listed
     const ctx = a?.contextWindowSize ? { tokens: a.tokenCount ?? 0, window: a.contextWindowSize } : n.ctx
