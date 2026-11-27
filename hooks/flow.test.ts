@@ -69,6 +69,23 @@ test('output ends a running agent; the agent list wins after that', () => {
   expect(setStatuses(f, [{ id: 'a', status: 'failed' }], 11)).toBe(f)
 })
 
+test('an agent that answered and sits idle (resumable) counts as finished; resumed, it is live again', () => {
+  let f = addAgent(emptyFlow(0), spawn('a'), 1)
+  f = setOutput(f, 'a', 'done', 2)
+  f = setStatuses(f, [{ id: 'a', status: 'idle' }], 3)
+  expect(f.nodes[1]).toMatchObject({ status: 'completed', endedAt: 2 })
+  // Idle seen before the answer arrives: the answer still finishes it.
+  let g = addAgent(emptyFlow(0), spawn('b'), 1)
+  g = setStatuses(g, [{ id: 'b', status: 'idle' }], 2)
+  g = setOutput(g, 'b', 'done', 3)
+  expect(g.nodes[1]!.status).toBe('completed')
+  // A SendMessage resumes it: running again, then a second answer finishes it.
+  f = setStatuses(f, [{ id: 'a', status: 'running' }], 4)
+  expect(f.nodes[1]).toMatchObject({ status: 'running', endedAt: undefined })
+  f = setOutput(f, 'a', 'again', 5)
+  expect(f.nodes[1]!.status).toBe('completed')
+})
+
 test('past the cap the oldest finished agents leave, never main or live ones', () => {
   let f = emptyFlow(0)
   f = addAgent(f, spawn('done1'), 1)

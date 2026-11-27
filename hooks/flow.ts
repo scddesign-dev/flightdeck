@@ -107,7 +107,7 @@ export const toolEnd = (f: Flow, id: string, tool: string, ref: number, ok: bool
   push(f, { at: now, agent: id, kind: 'result', tool, ok, ms, ref, text: '' })
 
 export const setOutput = (f: Flow, id: string, output: string, now: number): Flow => {
-  const g = patch(f, id, n => ({ ...n, output: clip(output, MAX_OUTPUT), endedAt: now, doing: undefined, status: n.status === 'running' ? 'completed' : n.status }))
+  const g = patch(f, id, n => ({ ...n, output: clip(output, MAX_OUTPUT), endedAt: now, doing: undefined, status: n.status === 'running' || n.status === 'idle' ? 'completed' : n.status }))
   const parent = g.nodes.find(n => n.id === id)?.parent ?? MAIN
   return push(g, { at: now, agent: id, kind: 'done', to: parent, text: clip(output, MAX_TEXT) })
 }
@@ -124,12 +124,14 @@ export function endAgentTasks(f: Flow, agent: string, now: number): Flow {
 // Statuses from $.agent.list(); an agent no longer listed keeps its last status.
 // An agent that is finished by that status (completed, failed, killed; listed or no
 // longer listed) ends its tasks; one waiting on its own background work keeps them.
+// A background agent that answered stays listed as 'idle' while SendMessage can
+// resume it: after its answer that is finished, not live; a resume reports 'running'.
 export function setStatuses(f: Flow, list: readonly { id: string; status: string }[], now: number): Flow {
   const by = new Map(list.map(a => [a.id, a.status]))
   let changed = false
   const nodes = f.nodes.map(n => {
     const s = by.get(n.id)
-    if (!s || s === n.status) return n
+    if (!s || s === n.status || (s === 'idle' && n.output !== undefined && !LIVE.has(n.status))) return n
     changed = true
     return { ...n, status: s, endedAt: LIVE.has(s) ? undefined : (n.endedAt ?? now) }
   })
