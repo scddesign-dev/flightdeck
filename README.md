@@ -29,6 +29,16 @@ In the desktop app, where `/plugin` does not run: click + next to the prompt box
 
 **Requires Node.js 18 or later on your PATH.** The page is served by a small Node server with no dependencies.
 
+## Updating
+
+Claude Code does not update plugins from this marketplace on its own until you turn that on: run `/plugin`, open the Marketplaces tab, select `agent-flow` and turn on auto-update. To update now instead:
+
+```
+claude plugin update agent-flow@agent-flow
+```
+
+Then run `/reload-plugins`, or start a new session.
+
 ## Use
 
 An interactive session (terminal, desktop app or editor) opens the view on its first turn, once, unless an Agent flow page is already open. Close the page and it stays closed until you run:
@@ -46,6 +56,14 @@ An interactive session (terminal, desktop app or editor) opens the view on its f
 - Everything stays on your machine: the server listens on 127.0.0.1 only. Snapshots hold your prompts, tool arguments and agent outputs. They are deleted after a week untouched.
 
 Run the server by hand: `node server/agent-flow-server.js 4123 <snapshot folder>`.
+
+## What it runs, and where your data goes
+
+- **Programs it starts**: the plugin's own `node server/agent-flow-server.js`, started detached. On Windows that is `powershell.exe Start-Process`; on macOS and Linux it is `sh -c 'nohup node …'`. To open the page in your default browser it runs `rundll32.exe url.dll,FileProtocolHandler <url>` on Windows and WSL, `open <url>` on macOS, or `xdg-open <url>` on Linux. It installs nothing, downloads nothing and runs no package launcher.
+- **What it reads**: your session's agents, prompts, tool calls with their arguments, messages between agents, agent outputs, model names and token and cost figures, as Claude Code reports them to the plugin's hooks.
+- **Where that goes**: into JSON files in the plugin's data folder on your machine, and to the page in your browser through the local server. That server listens on 127.0.0.1 only. Nothing is sent to any other machine or service.
+- **How long it is kept**: the server deletes a session's snapshot a week after it last changed. Uninstalling the plugin leaves its data folder until Claude Code removes it.
+- **Settings**: it changes no Claude Code settings or permissions.
 
 ## Limits
 

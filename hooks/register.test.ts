@@ -2,6 +2,9 @@ import { expect, test } from 'claude-code/testing'
 
 import { openArgv, serverArgv } from './register'
 
+// The test runner has timers; the engine's types (no DOM, no Node) do not declare them.
+declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
+
 const DATA = 'C:/data/agent-flow'
 const RUN_OK = { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
 
