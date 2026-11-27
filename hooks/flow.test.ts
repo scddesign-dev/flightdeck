@@ -194,3 +194,12 @@ test('the session context fill lands on main; no reading yet or unchanged writes
   expect(setContext(f, { tokens: 120_000, window: 200_000 })).toBe(f)
   expect(setContext(f, { window: 200_000 })).toBe(f)
 })
+
+test('a stopped or failed task wins over the loop status, answered or not', () => {
+  let f = addAgent(emptyFlow(0), spawn('a'), 1)
+  f = setOutput(f, 'a', 'partial', 2)
+  f = setStatuses(f, [{ id: 'a', status: 'idle', taskStatus: 'killed' }], 3)
+  expect(f.nodes[1]).toMatchObject({ status: 'killed', endedAt: 2 })
+  const g = setStatuses(addAgent(emptyFlow(0), spawn('b'), 1), [{ id: 'b', status: 'completed', taskStatus: 'failed' }], 4)
+  expect(g.nodes[1]).toMatchObject({ status: 'failed', endedAt: 4 })
+})
