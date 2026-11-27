@@ -130,8 +130,9 @@ export function setStatuses(f: Flow, list: readonly { id: string; status: string
   const by = new Map(list.map(a => [a.id, a.status]))
   let changed = false
   const nodes = f.nodes.map(n => {
-    const s = by.get(n.id)
-    if (!s || s === n.status || (s === 'idle' && n.output !== undefined && !LIVE.has(n.status))) return n
+    const listed = by.get(n.id)
+    const s = listed === 'idle' && n.output !== undefined ? 'completed' : listed
+    if (!s || s === n.status) return n
     changed = true
     return { ...n, status: s, endedAt: LIVE.has(s) ? undefined : (n.endedAt ?? now) }
   })
