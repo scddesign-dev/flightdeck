@@ -55,7 +55,7 @@ export type Flow = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'agent-flow': {
+    'flightdeck': {
       runs: Shaped<Record<string, Run>>
       lastUsd: number
       flow: Shaped<Flow>

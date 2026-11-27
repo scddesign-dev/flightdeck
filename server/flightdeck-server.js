@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Agent flow server: serves the browser page and streams each session's snapshot
-// file (written by the agent-flow plugin) to it over server-sent events.
-// No dependencies. Usage: node agent-flow-server.js <port> <snapshot dir>
+// Flightdeck server: serves the browser page and streams each session's snapshot
+// file (written by the flightdeck plugin) to it over server-sent events.
+// No dependencies. Usage: node flightdeck-server.js <port> <snapshot dir>
 'use strict'
 const fs = require('fs')
 const path = require('path')
@@ -9,10 +9,10 @@ const http = require('http')
 
 const PORT = Number(process.argv[2]) || 4123
 const DIR = process.argv[3]
-if (!DIR) { console.error('usage: node agent-flow-server.js <port> <snapshot folder>'); process.exit(2) }
+if (!DIR) { console.error('usage: node flightdeck-server.js <port> <snapshot folder>'); process.exit(2) }
 const PAGE = path.join(__dirname, 'index.html')
 const DAY = 24 * 3600 * 1000
-// ponytail: exits after an hour with no page open and no request; /agent-flow restarts it
+// ponytail: exits after an hour with no page open and no request; /flightdeck restarts it
 const IDLE_EXIT_MS = 3600 * 1000
 const POLL_MS = 250
 

@@ -5,7 +5,7 @@ import { openArgv, serverArgv } from './register'
 // The test runner has timers; the engine's types (no DOM, no Node) do not declare them.
 declare function setTimeout(fn: (value?: unknown) => void, ms: number): unknown
 
-const DATA = 'C:/data/agent-flow'
+const DATA = 'C:/data/flightdeck'
 const RUN_OK = { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
 
 // What every test answers: the session, its clock and this plugin's data folder.
@@ -92,7 +92,7 @@ test('background tasks start from their tool call and end on a notification or T
 })
 
 test('the server starts detached on every platform; quotes in paths survive', () => {
-  const win = serverArgv('windows', "C:/Users/O'Neil/p/server/agent-flow-server.js", 'C:/d/live')
+  const win = serverArgv('windows', "C:/Users/O'Neil/p/server/flightdeck-server.js", 'C:/d/live')
   expect(win.slice(0, 3)).toEqual(['powershell.exe', '-NoProfile', '-Command'])
   expect(win[3]).toContain('Start-Process -WindowStyle Hidden')
   expect(win[3]).toContain("O''Neil")
@@ -120,26 +120,26 @@ const flowCommand = async ($: any, on: any, serverUp: boolean[], platform = 'win
     return { value: { status: 200, ok: true, headers: {}, text: 'ok' } }
   })
   on('process.run', (_: unknown, e: any) => { runs.push([...e.argv]); return RUN_OK })
-  const res = await $.command.run({ command: 'agent-flow', args: '' } as never)
+  const res = await $.command.run({ command: 'flightdeck', args: '' } as never)
   return { res, runs }
 }
 
-test('/agent-flow starts the server when none answers, then opens the browser', async ($, on) => {
+test('/flightdeck starts the server when none answers, then opens the browser', async ($, on) => {
   const { res, runs } = await flowCommand($, on, [false, false, true], 'macos')
-  expect(res.text).toBe('Agent flow opened in your browser: http://127.0.0.1:4123/')
+  expect(res.text).toBe('Flightdeck opened in your browser: http://127.0.0.1:4123/')
   expect(runs.length).toBe(2)
   expect(runs[0]![0]).toBe('sh')
-  expect(runs[0]![3]).toMatch(/\/server\/agent-flow-server\.js$/)
+  expect(runs[0]![3]).toMatch(/\/server\/flightdeck-server\.js$/)
   expect(runs[0]![5]).toBe(`${DATA}/live`)
   expect(runs[1]).toEqual(['open', 'http://127.0.0.1:4123/?session=sid-1'])
 })
 
-test('/agent-flow reuses a server that already answers', async ($, on) => {
+test('/flightdeck reuses a server that already answers', async ($, on) => {
   const { runs } = await flowCommand($, on, [true])
   expect(runs).toEqual([['rundll32.exe', 'url.dll,FileProtocolHandler', 'http://127.0.0.1:4123/?session=sid-1']])
 })
 
-test('/agent-flow says so when the server never answers', async ($, on) => {
+test('/flightdeck says so when the server never answers', async ($, on) => {
   const { res, runs } = await flowCommand($, on, [false])
   expect(res.text).toMatch(/could not start: .*Node\.js/)
   // Only the start was tried: no page opened onto nothing.

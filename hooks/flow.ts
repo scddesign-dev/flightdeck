@@ -1,4 +1,4 @@
-// Agent flow: what the hooks record about agents, for the browser view.
+// Flightdeck: what the hooks record about agents, for the browser view.
 // Pure functions only, so each is testable without the engine.
 import type { BgTask, Flow, FlowEvent, FlowMsg, FlowNode, Run } from '../types'
 

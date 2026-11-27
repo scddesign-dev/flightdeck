@@ -1,15 +1,15 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "agent-flow",
+  "name": "flightdeck",
   "description": "A live graph of your Claude Code agents in the browser",
   "owner": { "name": "Michael Buxton", "url": "https://github.com/scddesign-dev" },
   "plugins": [
     {
-      "name": "agent-flow",
-      "displayName": "Agent flow",
+      "name": "flightdeck",
+      "displayName": "Flightdeck",
       "description": "A live graph of your Claude Code agents in the browser: who spawned whom, tool calls, messages, background tasks, timeline and file heatmap",
       "author": { "name": "Michael Buxton", "url": "https://github.com/scddesign-dev" },
-      "homepage": "https://github.com/scddesign-dev/agent-flow",
+      "homepage": "https://github.com/scddesign-dev/flightdeck",
       "category": "productivity",
       "source": "./"
     }

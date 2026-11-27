@@ -1,8 +1,8 @@
-# agent-flow
+# Flightdeck
 
 A live graph of your Claude Code agents, in your browser. See who spawned whom, what each agent is doing right now, its tool calls, the messages between agents, and what each one returned, as it happens.
 
-![Agent flow: agents spawning, tool calls, background tasks, zooming and panning](docs/agent-flow.gif)
+![Flightdeck: agents spawning, tool calls, background tasks, zooming and panning](docs/flightdeck.gif)
 
 - **Graph**: every agent is a card, laid out as a tree with at most three children to a column. Cards glide into place as agents come and go. A live agent pulses, the edge to it carries a moving current, and each spawn, message and returned answer sends a glowing pulse along its edge. Finished agents flash, linger for a few seconds, then fade off the graph. Scroll or use + and − to zoom, and drag to pan. Fit (Follow on by default) keeps the graph framed as it grows.
 - **Tool calls**: each card shows the agent's latest tool calls as chips: blue while running, green when ok, red when failed.
@@ -16,35 +16,35 @@ A live graph of your Claude Code agents, in your browser. See who spawned whom, 
 At the prompt of a Claude Code terminal session:
 
 ```
-/plugin install agent-flow --marketplace scddesign-dev/agent-flow
+/plugin install flightdeck --marketplace scddesign-dev/flightdeck
 ```
 
 Answer `y` to add the marketplace, then pick a scope. From a shell:
 
 ```
-claude plugin install agent-flow --marketplace scddesign-dev/agent-flow
+claude plugin install flightdeck --marketplace scddesign-dev/flightdeck
 ```
 
-In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with `scddesign-dev/agent-flow`, then Add plugin.
+In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with `scddesign-dev/flightdeck`, then Add plugin.
 
 **Requires Node.js 18 or later on your PATH.** The page is served by a small Node server with no dependencies.
 
 ## Updating
 
-Claude Code does not update plugins from this marketplace on its own until you turn that on: run `/plugin`, open the Marketplaces tab, select `agent-flow` and turn on auto-update. To update now instead:
+Claude Code does not update plugins from this marketplace on its own until you turn that on: run `/plugin`, open the Marketplaces tab, select `flightdeck` and turn on auto-update. To update now instead:
 
 ```
-claude plugin update agent-flow@agent-flow
+claude plugin update flightdeck@flightdeck
 ```
 
 Then run `/reload-plugins`, or start a new session.
 
 ## Use
 
-An interactive session (terminal, desktop app or editor) opens the view on its first turn, once, unless an Agent flow page is already open. Close the page and it stays closed until you run:
+An interactive session (terminal, desktop app or editor) opens the view on its first turn, once, unless a Flightdeck page is already open. Close the page and it stays closed until you run:
 
 ```
-/agent-flow
+/flightdeck
 ```
 
 `claude -p` runs, SDK runs and hosted sessions never open a browser.
@@ -52,14 +52,14 @@ An interactive session (terminal, desktop app or editor) opens the view on its f
 ## How it works
 
 - The plugin's hooks record agents, tool calls, messages and background tasks, and write each session's snapshot to `live/<session id>.json` in the plugin's data folder, at most once every 300 ms.
-- `server/agent-flow-server.js` serves the page on http://127.0.0.1:4123/ and pushes each snapshot to it over server-sent events. It starts detached the first time it is needed, serves every session, and exits after an hour with no page open.
+- `server/flightdeck-server.js` serves the page on http://127.0.0.1:4123/ and pushes each snapshot to it over server-sent events. It starts detached the first time it is needed, serves every session, and exits after an hour with no page open.
 - Everything stays on your machine: the server listens on 127.0.0.1 only. Snapshots hold your prompts, tool arguments and agent outputs. They are deleted after a week untouched.
 
-Run the server by hand: `node server/agent-flow-server.js 4123 <snapshot folder>`.
+Run the server by hand: `node server/flightdeck-server.js 4123 <snapshot folder>`.
 
 ## What it runs, and where your data goes
 
-- **Programs it starts**: the plugin's own `node server/agent-flow-server.js`, started detached. On Windows that is `powershell.exe Start-Process`; on macOS and Linux it is `sh -c 'nohup node …'`. To open the page in your default browser it runs `rundll32.exe url.dll,FileProtocolHandler <url>` on Windows and WSL, `open <url>` on macOS, or `xdg-open <url>` on Linux. It installs nothing, downloads nothing and runs no package launcher.
+- **Programs it starts**: the plugin's own `node server/flightdeck-server.js`, started detached. On Windows that is `powershell.exe Start-Process`; on macOS and Linux it is `sh -c 'nohup node …'`. To open the page in your default browser it runs `rundll32.exe url.dll,FileProtocolHandler <url>` on Windows and WSL, `open <url>` on macOS, or `xdg-open <url>` on Linux. It installs nothing, downloads nothing and runs no package launcher.
 - **What it reads**: your session's agents, prompts, tool calls with their arguments, messages between agents, agent outputs, model names and token and cost figures, as Claude Code reports them to the plugin's hooks.
 - **Where that goes**: into JSON files in the plugin's data folder on your machine, and to the page in your browser through the local server. That server listens on 127.0.0.1 only. Nothing is sent to any other machine or service.
 - **How long it is kept**: the server deletes a session's snapshot a week after it last changed. Uninstalling the plugin leaves its data folder until Claude Code removes it.

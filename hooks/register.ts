@@ -13,14 +13,14 @@ const FLOW_PORT = 4123
 const FLOW_URL = `http://127.0.0.1:${FLOW_PORT}/`
 
 // Per loop: model and effort of its last request, tokens and cost summed over all of them.
-const runs = atom({ plugin: 'agent-flow', key: 'runs' } as const, {}, { shape: 'runs-2' })
+const runs = atom({ plugin: 'flightdeck', key: 'runs' } as const, {}, { shape: 'runs-2' })
 // Session cost total at the last step end; each step is charged the change since.
-const lastUsd = atom({ plugin: 'agent-flow', key: 'lastUsd' } as const, 0)
+const lastUsd = atom({ plugin: 'flightdeck', key: 'lastUsd' } as const, 0)
 // Who spawned whom, the messages between them, what each is doing and returned.
-const flow = atom({ plugin: 'agent-flow', key: 'flow' } as const, emptyFlow(0), { shape: 'flow-3' })
+const flow = atom({ plugin: 'flightdeck', key: 'flow' } as const, emptyFlow(0), { shape: 'flow-3' })
 // Whether this session already auto-opened the browser view: kept in session state,
 // so a /reload-plugins does not open it again.
-const autoOpened = atom({ plugin: 'agent-flow', key: 'autoOpened' } as const, false)
+const autoOpened = atom({ plugin: 'flightdeck', key: 'autoOpened' } as const, false)
 
 const slash = (p: string) => p.replace(/\\/g, '/')
 
@@ -44,7 +44,7 @@ function queueSnapshot($: EngineInterface) {
   writeQueued = true
   $.clock.after(300, () => {
     writeQueued = false
-    void writeSnapshot($).catch(err => $.ui.log(`agent-flow: snapshot not written: ${String(err)}`, { to: 'debug' }))
+    void writeSnapshot($).catch(err => $.ui.log(`flightdeck: snapshot not written: ${String(err)}`, { to: 'debug' }))
   })
 }
 
@@ -77,7 +77,7 @@ async function openFlow($: EngineInterface, onlyIfNoPage = false) {
   const { platform = 'unknown' } = await $.session.info()
   const up = () => $.http.fetch(`${FLOW_URL}ping`).then(r => r.ok, () => false)
   if (!(await up())) {
-    await $.process.run(serverArgv(platform, slash(`${$.plugin.root}/server/agent-flow-server.js`), await liveDir($)))
+    await $.process.run(serverArgv(platform, slash(`${$.plugin.root}/server/flightdeck-server.js`), await liveDir($)))
     let i = 0
     while (!(await up())) {
       if (++i > 30) throw new Error(`the server did not answer on port ${FLOW_PORT}; is Node.js 18 or later on your PATH?`)
@@ -97,14 +97,14 @@ async function openFlow($: EngineInterface, onlyIfNoPage = false) {
 }
 
 // An interactive session opens the view on its first turn, once: a page the person
-// closes stays closed until they run /agent-flow. A person is at a terminal, the
+// closes stays closed until they run /flightdeck. A person is at a terminal, the
 // desktop app or an editor by then; `claude -p` and SDK runs draw nowhere, and a
 // hosted session's machine has no browser of the person's.
 async function autoOpen($: EngineInterface) {
   if (await read($, autoOpened)) return
   await update($, autoOpened, () => true)
   if ((await $.session.surfaces()).length === 0 || (await $.session.info()).isHosted) return
-  await openFlow($, true).catch(err => $.ui.log(`agent-flow: did not auto-open: ${String(err)}`, { to: 'debug' }))
+  await openFlow($, true).catch(err => $.ui.log(`flightdeck: did not auto-open: ${String(err)}`, { to: 'debug' }))
 }
 
 // Registers the command and starts the poll once per module load: from session.start,
@@ -113,8 +113,8 @@ async function autoOpen($: EngineInterface) {
 function startTimers($: EngineInterface) {
   if (timersStarted) return
   timersStarted = true
-  $.command.register({ name: 'agent-flow', description: 'Open the live agent graph in your browser: agents, tool calls, messages, timeline, files' })
-    .catch(err => $.ui.log(`agent-flow: /agent-flow was not registered: ${String(err)}`))
+  $.command.register({ name: 'flightdeck', description: 'Open the live agent graph in your browser: agents, tool calls, messages, timeline, files' })
+    .catch(err => $.ui.log(`flightdeck: /flightdeck was not registered: ${String(err)}`))
   // ponytail: 2s poll of the agent list; switch to events if one lands for status changes
   $.clock.every(2000, async () => {
     const all = await $.agent.list()
@@ -137,14 +137,14 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'agent-flow' }, async $ => {
+  on('command.run', { command: 'flightdeck' }, async $ => {
     startTimers($)
     try {
       await openFlow($)
     } catch (err) {
-      return { text: `Agent flow could not start: ${String(err)}` }
+      return { text: `Flightdeck could not start: ${String(err)}` }
     }
-    return { text: `Agent flow opened in your browser: ${FLOW_URL}` }
+    return { text: `Flightdeck opened in your browser: ${FLOW_URL}` }
   })
 
   on('agent.spawn', async ($, e, next) => {
