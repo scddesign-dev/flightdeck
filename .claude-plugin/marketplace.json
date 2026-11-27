@@ -6,7 +6,12 @@
   "plugins": [
     {
       "name": "agent-flow",
+      "displayName": "Agent flow",
       "description": "A live graph of your Claude Code agents in the browser: who spawned whom, tool calls, messages, background tasks, timeline and file heatmap",
+      "version": "0.1.1",
+      "author": { "name": "Michael Buxton", "url": "https://github.com/scddesign-dev" },
+      "homepage": "https://github.com/scddesign-dev/agent-flow",
+      "category": "productivity",
       "source": "./"
     }
   ]

@@ -1,9 +1,10 @@
 {
   "name": "agent-flow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A live graph of your Claude Code agents in the browser: who spawned whom, tool calls, messages, background tasks, timeline and file heatmap",
   "author": {
-    "name": "Michael Buxton"
+    "name": "Michael Buxton",
+    "url": "https://github.com/scddesign-dev"
   },
   "homepage": "https://github.com/scddesign-dev/agent-flow",
   "repository": "https://github.com/scddesign-dev/agent-flow",
