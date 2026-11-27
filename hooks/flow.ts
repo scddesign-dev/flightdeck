@@ -1,6 +1,6 @@
 // Flightdeck: what the hooks record about agents, for the browser view.
 // Pure functions only, so each is testable without the engine.
-import type { BgTask, Flow, FlowEvent, FlowMsg, FlowNode, Run } from '../types'
+import type { BgTask, Ctx, Flow, FlowEvent, FlowMsg, FlowNode, Run } from '../types'
 
 export const MAIN = 'main'
 // ponytail: fixed caps keep the state and the snapshot small; finished agents past
@@ -126,19 +126,34 @@ export function endAgentTasks(f: Flow, agent: string, now: number): Flow {
 // longer listed) ends its tasks; one waiting on its own background work keeps them.
 // A background agent that answered stays listed as 'idle' while SendMessage can
 // resume it: after its answer that is finished, not live; a resume reports 'running'.
-export function setStatuses(f: Flow, list: readonly { id: string; status: string }[], now: number): Flow {
-  const by = new Map(list.map(a => [a.id, a.status]))
+// Each listed agent's context fill comes along; one with no window keeps its last.
+type Listed = { id: string; status: string; tokenCount?: number; contextWindowSize?: number }
+export function setStatuses(f: Flow, list: readonly Listed[], now: number): Flow {
+  const by = new Map(list.map(a => [a.id, a]))
   let changed = false
   const nodes = f.nodes.map(n => {
-    const listed = by.get(n.id)
+    const a = by.get(n.id), listed = a?.status
     // Listed idle, or dropped from the list while idle: an answered agent is finished.
     const s = (listed ?? n.status) === 'idle' && n.output !== undefined ? 'completed' : listed
-    if (!s || s === n.status) return n
+    const ctx = a?.contextWindowSize ? { tokens: a.tokenCount ?? 0, window: a.contextWindowSize } : n.ctx
+    const newStatus = !!s && s !== n.status, newCtx = !sameCtx(ctx, n.ctx)
+    if (!newStatus && !newCtx) return n
     changed = true
-    return { ...n, status: s, endedAt: LIVE.has(s) ? undefined : (n.endedAt ?? now) }
+    const g = newCtx ? { ...n, ctx } : n
+    return newStatus ? { ...g, status: s, endedAt: LIVE.has(s) ? undefined : (n.endedAt ?? now) } : g
   })
   const g = changed ? { ...f, nodes } : f
   return g.nodes.reduce((h, n) => (LIVE.has(n.status) ? h : endAgentTasks(h, n.id, now)), g)
+}
+
+const sameCtx = (a?: Ctx, b?: Ctx) => a?.tokens === b?.tokens && a?.window === b?.window
+
+// The session's context fill ($.session.usage().context) on main; no reading
+// yet (a fresh or just compacted window) keeps the last one.
+export function setContext(f: Flow, c: { tokens?: number; window: number }): Flow {
+  if (c.tokens === undefined || !c.window) return f
+  const ctx = { tokens: c.tokens, window: c.window }
+  return sameCtx(ctx, f.nodes.find(n => n.id === MAIN)?.ctx) ? f : patch(f, MAIN, n => ({ ...n, ctx }))
 }
 
 // The node a message's `to` names: an agent's id or its SendMessage name.

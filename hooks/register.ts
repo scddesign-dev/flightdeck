@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Flow, Run } from '../types'
 import {
-  MAIN, addAgent, addMessage, bgTaskOf, emptyFlow, parseNotifications, setOutput, setStatuses, snapshot,
+  MAIN, addAgent, addMessage, bgTaskOf, emptyFlow, parseNotifications, setContext, setOutput, setStatuses, snapshot,
   taskEnd, taskStart, toolEnd, toolStart,
 } from './flow'
 
@@ -115,12 +115,11 @@ function startTimers($: EngineInterface) {
   timersStarted = true
   $.command.register({ name: 'flightdeck', description: 'Open the live agent graph in your browser: agents, tool calls, messages, timeline, files' })
     .catch(err => $.ui.log(`flightdeck: /flightdeck was not registered: ${String(err)}`))
-  // ponytail: 2s poll of the agent list; switch to events if one lands for status changes
+  // ponytail: 2s poll of the agent list and the session's context fill; both are
+  // local reads, no model request. Switch to events if one lands for status changes
   $.clock.every(2000, async () => {
-    const all = await $.agent.list()
-    const now = await $.clock.now()
-    const f = await read($, flow)
-    const next = setStatuses(f, all, now)
+    const [all, usage, now, f] = await Promise.all([$.agent.list(), $.session.usage(), $.clock.now(), read($, flow)])
+    const next = setContext(setStatuses(f, all, now), usage.context)
     if (next !== f) await editFlow($, () => next)
   })
 }

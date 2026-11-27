@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   MAX_EVENTS, MAX_FILES, MAX_NODES, MAX_TASKS, addAgent, addMessage, bgTaskOf, describeCall, emptyFlow,
-  parseNotifications, resolveTo, setOutput, setStatuses, snapshot, taskEnd, taskStart, toolEnd, toolStart,
+  parseNotifications, resolveTo, setContext, setOutput, setStatuses, snapshot, taskEnd, taskStart, toolEnd, toolStart,
 } from './flow'
 
 const spawn = (id: string, parent?: string, name?: string) =>
@@ -175,4 +175,22 @@ test('the snapshot carries the session, the flow and the runs', () => {
   const s = JSON.parse(snapshot(f, { a: { model: 'm', inTok: 1, outTok: 2, usd: 0.5 } }, { id: 'sid', cwd: 'C:/r' }, 9))
   expect(s).toMatchObject({ v: 1, session: { id: 'sid', cwd: 'C:/r' }, updatedAt: 9, runs: { a: { usd: 0.5 } } })
   expect(s.flow.nodes.length).toBe(2)
+})
+
+test('the agent list records each agent context fill; unchanged readings write nothing', () => {
+  let f = addAgent(emptyFlow(0), spawn('a'), 1)
+  f = setStatuses(f, [{ id: 'a', status: 'running', tokenCount: 50_000, contextWindowSize: 200_000 }], 2)
+  expect(f.nodes[1]!.ctx).toEqual({ tokens: 50_000, window: 200_000 })
+  expect(setStatuses(f, [{ id: 'a', status: 'running', tokenCount: 50_000, contextWindowSize: 200_000 }], 3)).toBe(f)
+  // No window reported (no model yet): the last reading stays.
+  expect(setStatuses(f, [{ id: 'a', status: 'running', tokenCount: 9 }], 4)).toBe(f)
+  // Dropped from the list: the last reading stays too.
+  expect(setStatuses(f, [], 5).nodes[1]!.ctx).toEqual({ tokens: 50_000, window: 200_000 })
+})
+
+test('the session context fill lands on main; no reading yet or unchanged writes nothing', () => {
+  const f = setContext(emptyFlow(0), { tokens: 120_000, window: 200_000 })
+  expect(f.nodes[0]!.ctx).toEqual({ tokens: 120_000, window: 200_000 })
+  expect(setContext(f, { tokens: 120_000, window: 200_000 })).toBe(f)
+  expect(setContext(f, { window: 200_000 })).toBe(f)
 })

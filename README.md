@@ -9,6 +9,8 @@ A live graph of your Claude Code agents, in your browser. See who spawned whom, 
 - **Details**: click an agent for its prompt, model, effort, tokens and cost, tool calls, messages and output.
 - **Background tasks**: the left pane lists backgrounded shell commands, Monitors and Workflows, and marks each one finished when its completion notification arrives, or killed by TaskStop.
 - **Timeline, Transcript and Files**: a timeline of every agent and tool call, a filterable transcript, and a heatmap of the files read and edited.
+- **Context**: the Timeline shows how full the session's context window is, and a small fill bar for each agent: green, amber from 70%, red from 85%. These are local readings; they make no model request.
+- **Agents**: every agent in a table, running ones first, coloured by outcome (blue running, green succeeded, red failed or killed), with model, time, tokens, context fill and cost.
 - **Every session**: one page serves every session on the machine, and you pick one from the Session list.
 
 ## Install

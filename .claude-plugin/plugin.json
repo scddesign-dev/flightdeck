@@ -1,6 +1,6 @@
 {
   "name": "flightdeck",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "A live graph of your Claude Code agents in the browser: who spawned whom, tool calls, messages, background tasks, timeline and file heatmap",
   "author": {
     "name": "Michael Buxton",

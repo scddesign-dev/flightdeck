@@ -13,7 +13,10 @@ export type FlowNode = {
   endedAt?: number
   doing?: string
   output?: string
+  // Context window fill: main from the session, an agent from the agent list.
+  ctx?: Ctx
 }
+export type Ctx = { tokens: number; window: number }
 // A message one loop sent another; `to` is the address as written (a name or an id).
 export type FlowMsg = { from: string; to: string; text: string; at: number }
 // One thing that happened, in order: the browser page animates each new one.
