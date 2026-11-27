@@ -69,6 +69,19 @@
   .agents tr[data-id]:hover { background: #1b2029; }
   .agents td:first-child { border-left: 3px solid var(--c); }
   .agents i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--c); margin-right: 6px; }
+  .cx { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+  .cx-grid { display: grid; gap: 3px; }
+  .cx-grid i { width: 11px; height: 11px; border-radius: 2px; display: block; }
+  .cx-rows { min-width: 260px; font-size: 12px; }
+  .cx-rows div, .cx-list div { display: flex; gap: 8px; align-items: center; padding: 1px 0; }
+  .cx-rows b { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+  .cx-rows span:nth-child(2), .cx-list span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cx-rows .n, .cx-list .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); min-width: 48px; }
+  .cx-lists { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 10px; }
+  .cx-list { width: 260px; font-size: 12px; }
+  .cx-list h3 { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 4px; }
+  .cx-list span:first-child { direction: rtl; text-align: left; }
+  #timeline .ctx { cursor: pointer; }
   .bar .r { background: var(--run); } .bar .w { background: var(--msg); }
   /* graph: a dot grid that pans and zooms with the view (set from the script) */
   #stage { background-color: #0d0f13; background-image: radial-gradient(circle, #252c38 1.1px, transparent 1.4px); }
@@ -131,12 +144,14 @@
     <button role="tab" data-tab="transcript" aria-selected="false">Transcript</button>
     <button role="tab" data-tab="files" aria-selected="false">Files</button>
     <button role="tab" data-tab="agents" aria-selected="false">Agents</button>
+    <button role="tab" data-tab="context" aria-selected="false">Context</button>
     <input id="filter" placeholder="Filter transcript" aria-label="Filter transcript" hidden>
   </nav>
   <div class="tab" id="timeline"></div>
   <div class="tab" id="transcript" hidden></div>
   <div class="tab" id="files" hidden></div>
   <div class="tab" id="agents" hidden></div>
+  <div class="tab" id="context" hidden></div>
 </footer>
 <script>
 'use strict'
@@ -154,7 +169,7 @@ const el = (tag, attrs = {}, text) => {
 const clip = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '')
 const short = m => (m || '').replace(/^claude-/, '')
 const secs = ms => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s` }
-const ktok = n => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
+const ktok = n => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 const pct = c => Math.round(c.tokens / c.window * 100)
 // Context fill: green, then amber from 70%, red from 85% (auto-compact nears).
 const ctxColor = p => (p >= 85 ? '#ef4444' : p >= 70 ? '#f59e0b' : '#22c55e')
@@ -591,7 +606,8 @@ function timeline() {
 function ctxStrip() {
   const c = byId('main')?.ctx
   if (!c) return []
-  const p = pct(c), d = el('div', { class: 'ctx' })
+  const p = pct(c), d = el('div', { class: 'ctx', title: 'Open the Context tab: the window as /context breaks it down' })
+  d.onclick = () => document.querySelector('[data-tab=context]').click()
   const bar = el('div', { class: 'bar', title: `${c.tokens.toLocaleString()} of ${c.window.toLocaleString()} tokens` })
   bar.append(el('div', { style: `width:${Math.min(100, p)}%;background:${ctxColor(p)}` }))
   d.append(el('b', {}, 'Context'), bar, el('span', { style: `color:${ctxColor(p)}` }, `${p}%`), el('span', { class: 'muted' }, `${ktok(c.tokens)} / ${ktok(c.window)} tokens`))
@@ -627,6 +643,41 @@ function agents() {
   }
   box.replaceChildren(sum, t)
 }
+// The main session's window as /context breaks it down: the grid, its rows, and
+// the heaviest entries of each list. Colours: one per row, by name (rows can
+// share a theme key), in the order the rows come; free space and the buffer stay grey.
+const PALETTE = ['#3b82f6', '#a855f7', '#f59e0b', '#22c55e', '#ec4899', '#14b8a6', '#eab308', '#f97316', '#8b5cf6', '#06b6d4']
+function context() {
+  const b = snap.flow.context, box = $('context')
+  if (!b) { box.replaceChildren(el('p', { class: 'muted' }, 'No context reading yet. It appears after the session\'s next model response.')); return }
+  const hue = new Map()
+  for (const r of b.rows) if (!hue.has(r.name)) hue.set(r.name, r.kind === 'free' ? '#2a313c' : r.kind === 'buffer' ? '#4b5563' : PALETTE[hue.size % PALETTE.length])
+  const col = name => hue.get(name) || '#6b7280'
+  const head = el('div', { class: 'ctx' })
+  head.append(el('b', {}, 'Context'), el('span', {}, `${b.model} · ${ktok(b.total)} / ${ktok(b.window)} tokens (${b.percent}%)`),
+    el('span', { class: 'muted' }, `${b.compactAt ? `auto-compact at ${ktok(b.compactAt)} · ` : ''}estimated locally, as /context does`))
+  const grid = el('div', { class: 'cx-grid', style: `grid-template-columns:repeat(${b.grid[0]?.length || 10}, 11px)` })
+  for (const row of b.grid) for (const q of row) {
+    const free = q.n === 'Free space'
+    grid.append(el('i', { title: q.n, style: free ? 'border:1px solid #2a313c' : `background:${col(q.n)};opacity:${0.35 + 0.65 * q.f}` }))
+  }
+  const rows = el('div', { class: 'cx-rows' })
+  for (const r of b.rows) {
+    const d = el('div', { class: r.kind === 'deferred' ? 'muted' : '' })
+    d.append(el('b', { style: `background:${col(r.name)}` }), el('span', {}, r.name + (r.kind === 'deferred' && !/deferred/i.test(r.name) ? ' (deferred)' : '')),
+      el('span', { class: 'n' }, ktok(r.tokens)), el('span', { class: 'n' }, `${(r.tokens / b.window * 100).toFixed(1)}%`))
+    rows.append(d)
+  }
+  const lists = el('div', { class: 'cx-lists' })
+  for (const [name, items] of Object.entries(b.lists)) {
+    const l = el('div', { class: 'cx-list' })
+    l.append(el('h3', {}, name), ...items.map(x => { const d = el('div', { title: x.name }); d.append(el('span', {}, x.name), el('span', { class: 'n' }, ktok(x.tokens))); return d }))
+    lists.append(l)
+  }
+  const top = el('div', { class: 'cx' })
+  top.append(grid, rows)
+  box.replaceChildren(head, top, lists)
+}
 function transcript() {
   const q = $('filter').value.toLowerCase(), box = $('transcript')
   const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 4
@@ -660,7 +711,7 @@ function files() {
     return row
   }))
 }
-function footer() { if (!snap) return; ({ timeline, transcript, files, agents })[tab]() }
+function footer() { if (!snap) return; ({ timeline, transcript, files, agents, context })[tab]() }
 
 // --- applying a snapshot ----------------------------------------------------
 function apply(s) {

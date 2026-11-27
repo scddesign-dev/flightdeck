@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Flow, Run } from '../types'
 import {
-  MAIN, addAgent, addMessage, bgTaskOf, emptyFlow, parseNotifications, setContext, setOutput, setStatuses, snapshot,
+  MAIN, addAgent, addMessage, bgTaskOf, emptyFlow, parseNotifications, setContext, setOutput, setStatuses, snapshot, trimBreakdown,
   taskEnd, taskStart, toolEnd, toolStart,
 } from './flow'
 
@@ -119,7 +119,14 @@ function startTimers($: EngineInterface) {
   // local reads, no model request. Switch to events if one lands for status changes
   $.clock.every(2000, async () => {
     const [all, usage, now, f] = await Promise.all([$.agent.list(), $.session.usage(), $.clock.now(), read($, flow)])
-    const next = setContext(setStatuses(f, all, now), usage.context)
+    let next = setContext(setStatuses(f, all, now), usage.context)
+    // The /context breakdown, re-estimated locally (`summary`: no requests) when
+    // the window's fill moved, or once if this flow has none yet.
+    const ctx = (g: typeof f) => g.nodes.find(n => n.id === MAIN)?.ctx
+    if (!f.context || ctx(next) !== ctx(f)) {
+      const b = (await $.session.usage({ breakdown: 'summary' })).context.breakdown
+      if (b) next = { ...next, context: trimBreakdown(b) }
+    }
     if (next !== f) await editFlow($, () => next)
   })
 }

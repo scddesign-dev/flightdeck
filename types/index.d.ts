@@ -17,6 +17,19 @@ export type FlowNode = {
   ctx?: Ctx
 }
 export type Ctx = { tokens: number; window: number }
+// The main session's window as /context breaks it down (a local estimate): its
+// rows, its grid (f: fullness 0-1, n: the row it belongs to), and the
+// heaviest entries of each list beneath it.
+export type Breakdown = {
+  total: number
+  window: number
+  percent: number
+  compactAt?: number
+  model: string
+  rows: { name: string; tokens: number; color: string; kind: string }[]
+  grid: { f: number; n: string }[][]
+  lists: Record<string, { name: string; tokens: number }[]>
+}
 // A message one loop sent another; `to` is the address as written (a name or an id).
 export type FlowMsg = { from: string; to: string; text: string; at: number }
 // One thing that happened, in order: the browser page animates each new one.
@@ -54,6 +67,7 @@ export type Flow = {
   files: Record<string, { r: number; w: number }>
   tasks: BgTask[]
   seq: number
+  context?: Breakdown
 }
 
 declare module 'claude-code' {

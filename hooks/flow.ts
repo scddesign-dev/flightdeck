@@ -1,6 +1,8 @@
 // Flightdeck: what the hooks record about agents, for the browser view.
 // Pure functions only, so each is testable without the engine.
-import type { BgTask, Ctx, Flow, FlowEvent, FlowMsg, FlowNode, Run } from '../types'
+import type { SessionContextBreakdown } from 'claude-code'
+
+import type { Breakdown, BgTask, Ctx, Flow, FlowEvent, FlowMsg, FlowNode, Run } from '../types'
 
 export const MAIN = 'main'
 // ponytail: fixed caps keep the state and the snapshot small; finished agents past
@@ -156,6 +158,29 @@ export function setContext(f: Flow, c: { tokens?: number; window: number }): Flo
   if (c.tokens === undefined || !c.window) return f
   const ctx = { tokens: c.tokens, window: c.window }
   return sameCtx(ctx, f.nodes.find(n => n.id === MAIN)?.ctx) ? f : patch(f, MAIN, n => ({ ...n, ctx }))
+}
+
+// ponytail: each list keeps its heaviest MAX_LIST entries; the snapshot stays small
+const MAX_LIST = 20
+const top = (xs: { name: string; tokens: number }[]) => [...xs].sort((a, b) => b.tokens - a.tokens).slice(0, MAX_LIST)
+
+// What the page draws of a /context breakdown.
+export function trimBreakdown(b: SessionContextBreakdown): Breakdown {
+  const lists: Breakdown['lists'] = {
+    'Memory files': top(b.memoryFiles.map(m => ({ name: m.path, tokens: m.tokens }))),
+    'MCP tools': top(b.mcpTools.map(t => ({ name: `${t.serverName}: ${t.name}`, tokens: t.tokens }))),
+    'Custom agents': top(b.agents.map(a => ({ name: a.agentType, tokens: a.tokens }))),
+    'Skills': top((b.skills?.skillFrontmatter ?? []).map(k => ({ name: k.name, tokens: k.tokens }))),
+    'System tools': top(b.systemTools ?? []),
+  }
+  for (const k of Object.keys(lists)) if (!lists[k]!.length) delete lists[k]
+  return {
+    total: b.totalTokens, window: b.rawMaxTokens, percent: b.percentage, compactAt: b.autoCompactThreshold,
+    model: b.modelLabel ?? b.model,
+    rows: b.categories.map(c => ({ name: c.name, tokens: c.tokens, color: c.color, kind: c.kind })),
+    grid: b.gridRows.map(r => r.map(q => ({ f: q.squareFullness, n: q.categoryName }))),
+    lists,
+  }
 }
 
 // The node a message's `to` names: an agent's id or its SendMessage name.

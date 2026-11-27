@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   MAX_EVENTS, MAX_FILES, MAX_NODES, MAX_TASKS, addAgent, addMessage, bgTaskOf, describeCall, emptyFlow,
-  parseNotifications, resolveTo, setContext, setOutput, setStatuses, snapshot, taskEnd, taskStart, toolEnd, toolStart,
+  parseNotifications, resolveTo, setContext, setOutput, trimBreakdown, setStatuses, snapshot, taskEnd, taskStart, toolEnd, toolStart,
 } from './flow'
 
 const spawn = (id: string, parent?: string, name?: string) =>
@@ -202,4 +202,23 @@ test('a stopped or failed task wins over the loop status, answered or not', () =
   expect(f.nodes[1]).toMatchObject({ status: 'killed', endedAt: 2 })
   const g = setStatuses(addAgent(emptyFlow(0), spawn('b'), 1), [{ id: 'b', status: 'completed', taskStatus: 'failed' }], 4)
   expect(g.nodes[1]).toMatchObject({ status: 'failed', endedAt: 4 })
+})
+
+test('the /context breakdown keeps its rows and grid, and caps each list heaviest first', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `t${i}`, serverName: 's', tokens: i, isLoaded: true }))
+  const b = trimBreakdown({
+    categories: [{ name: 'Messages', tokens: 900, color: 'promptBorder', isDeferred: false, kind: 'used' }],
+    totalTokens: 900, rawMaxTokens: 10_000, percentage: 9, autoCompactThreshold: 8_000, model: 'claude-opus-5-5', modelLabel: 'Opus 5.5',
+    gridRows: [[{ color: 'promptBorder', isFilled: true, categoryName: 'Messages', tokens: 900, percentage: 9, squareFullness: 1 }]],
+    memoryFiles: [{ path: 'C:/r/CLAUDE.md', type: 'Project', tokens: 300 }],
+    mcpTools: many(30), agents: [{ agentType: 'Explore', source: 'built-in', tokens: 50 }],
+    skills: { totalSkills: 3, includedSkills: 3, tokens: 70, skillFrontmatter: [{ name: 'qa', source: 'plugin', tokens: 20 }] },
+  } as unknown as Parameters<typeof trimBreakdown>[0])
+  expect(b).toMatchObject({ total: 900, window: 10_000, percent: 9, compactAt: 8_000, model: 'Opus 5.5' })
+  expect(b.rows).toEqual([{ name: 'Messages', tokens: 900, color: 'promptBorder', kind: 'used' }])
+  expect(b.grid).toEqual([[{ f: 1, n: 'Messages' }]])
+  expect(b.lists['Memory files']).toEqual([{ name: 'C:/r/CLAUDE.md', tokens: 300 }])
+  expect(b.lists['MCP tools']!.length).toBe(20)
+  expect(b.lists['MCP tools']![0]).toEqual({ name: 's: t29', tokens: 29 })
+  expect(b.lists['Skills']).toEqual([{ name: 'qa', tokens: 20 }])
 })
