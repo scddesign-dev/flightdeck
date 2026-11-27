@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent flow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161a21; --line: #262c36; --text: #e6e9ef; --dim: #8b93a1;
+    --run: #3b82f6; --done: #22c55e; --fail: #ef4444; --wait: #a855f7; --pend: #9ca3af; --msg: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+  body { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 14px; margin: 0; font-weight: 600; }
+  select, button { background: #1f2430; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; cursor: pointer; }
+  button:hover, select:hover { border-color: #3a4352; }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--run); outline-offset: 1px; }
+  #summary { color: var(--dim); }
+  #live { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); margin-left: auto; }
+  #live i { width: 8px; height: 8px; border-radius: 50%; background: var(--fail); display: inline-block; }
+  #live.on i { background: var(--done); box-shadow: 0 0 6px var(--done); }
+  main { display: grid; grid-template-columns: 250px 1fr 360px; min-height: 0; }
+  #bg { border-left: 0; border-right: 1px solid var(--line); }
+  #bg h2 span { font-weight: 400; font-size: 12px; }
+  .task { padding: 6px 8px; margin: 6px 0; border: 1px solid var(--line); border-radius: 8px; background: #1a1f28; cursor: pointer; }
+  .task:hover, .task:focus-visible { border-color: #3a4352; outline: none; }
+  .task.ended { opacity: .6; }
+  .task-top { display: flex; gap: 6px; align-items: center; font-size: 11px; }
+  .task-top i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .task-top .kind { text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+  .task-top .muted { margin-left: auto; }
+  .task-label { font: 12px/1.35 ui-monospace, Consolas, monospace; word-break: break-word; margin: 3px 0; max-height: 4.1em; overflow: hidden; }
+  #stage { position: relative; overflow: hidden; cursor: grab; }
+  #stage.drag { cursor: grabbing; }
+  #graph { width: 100%; height: 100%; display: block; }
+  #empty { position: absolute; inset: auto 0 16px 0; text-align: center; color: var(--dim); pointer-events: none; }
+  #empty[hidden] { display: none; }
+  #tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 12px; }
+  aside h2 { font-size: 14px; margin: 0 0 4px; }
+  aside h3 { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 4px; }
+  aside pre { white-space: pre-wrap; word-break: break-word; margin: 0; font: 12px/1.45 ui-monospace, Consolas, monospace; background: #11151b; padding: 8px; border-radius: 6px; border: 1px solid var(--line); max-height: 260px; overflow: auto; }
+  .muted { color: var(--dim); }
+  .row { display: flex; gap: 8px; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed #20252e; }
+  .row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  footer { border-top: 1px solid var(--line); background: var(--panel); height: 240px; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  footer nav { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); align-items: center; }
+  footer nav button[aria-selected="true"] { border-color: var(--run); color: #fff; }
+  footer nav input { margin-left: auto; background: #1f2430; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; width: 220px; }
+  .tab { overflow: auto; padding: 8px 12px; min-height: 0; }
+  .tab[hidden] { display: none; }
+  #transcript div { padding: 2px 0; border-bottom: 1px solid #1c2129; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  #transcript div:hover { background: #1b2029; }
+  #transcript b { font-weight: 600; }
+  .k-spawn { color: var(--run); } .k-msg { color: var(--msg); } .k-tool { color: #c3c9d4; } .k-result { color: var(--dim); } .k-done { color: var(--done); } .k-err { color: var(--fail); }
+  .file { display: grid; grid-template-columns: minmax(0, 1fr) 260px 70px; gap: 10px; align-items: center; padding: 2px 0; font: 12px ui-monospace, Consolas, monospace; }
+  .file span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+  .bar { height: 10px; display: flex; border-radius: 3px; overflow: hidden; background: #1c2129; }
+  .bar .r { background: var(--run); } .bar .w { background: var(--msg); }
+  /* graph: a dot grid that pans and zooms with the view (set from the script) */
+  #stage { background-color: #0d0f13; background-image: radial-gradient(circle, #252c38 1.1px, transparent 1.4px); }
+  .card rect.box { fill: url(#cardfill); stroke-width: 2; rx: 10; }
+  .card.sel rect.box { fill: #243049; stroke-width: 3; }
+  .card:hover rect.box { fill: #222a39; }
+  .card text { fill: var(--text); }
+  .card .meta, .card .doing { fill: var(--dim); font-size: 11px; }
+  .card { cursor: pointer; }
+  .card:focus-visible { outline: none; }
+  .card:focus-visible rect.box { stroke-width: 3; }
+  .card.live rect.box { animation: glow 1.8s ease-in-out infinite; }
+  @keyframes glow { 50% { stroke-opacity: .5; } }
+  /* the halo: a ring that keeps leaving a live card; one burst when it finishes */
+  .card .halo { fill: none; stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; pointer-events: none; }
+  .card.live .halo { animation: halo 2.2s ease-out infinite; }
+  .card.flash .halo { animation: burst 1s ease-out; }
+  @keyframes halo { 0% { opacity: .65; transform: scale(1); } 100% { opacity: 0; transform: scale(1.08, 1.4); } }
+  @keyframes burst { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.18, 1.9); } }
+  .card circle.dot { transform-box: fill-box; transform-origin: center; }
+  .card.live circle.dot { animation: beat 1.2s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.6); opacity: .55; } }
+  .edge { fill: none; stroke: #2c3442; stroke-width: 1.6; }
+  /* a current running along the edge to each live agent */
+  .edge-flow { fill: none; stroke-width: 2.2; stroke-dasharray: 2 12; stroke-linecap: round; opacity: 0; }
+  .edge-flow.on { opacity: .9; animation: flow .8s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -14; } }
+  .chip rect { rx: 8; stroke-width: 1; }
+  .chip text { font-size: 10px; fill: #cfd5df; }
+  .chip.run rect { animation: chip 1s ease-in-out infinite; }
+  @keyframes chip { 50% { stroke-opacity: .35; fill-opacity: .35; } }
+  .chip.new { animation: pop .35s ease-out; }
+  /* opacity only: a CSS transform would replace the chip's SVG position */
+  @keyframes pop { from { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .card rect.box, .card .halo, .card circle.dot, .edge-flow.on, .chip rect, .chip.new { animation: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent flow</h1>
+  <label>Session <select id="session" aria-label="Session"></select></label>
+  <span id="summary"></span>
+  <span id="live" title="Live connection"><i></i><span>connecting</span></span>
+</header>
+<main>
+  <aside id="bg" aria-label="Background tasks"><h2>Background <span id="bgcount" class="muted"></span></h2><div id="bglist"><p class="muted">Nothing running in the background.</p></div></aside>
+  <div id="stage">
+    <svg id="graph" aria-label="Agent graph"><defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <linearGradient id="cardfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f2634"/><stop offset="1" stop-color="#161a22"/></linearGradient>
+    </defs><g id="world"><g id="edges"></g><g id="nodes"></g><g id="fx"></g></g></svg>
+    <div id="empty">No agents yet in this session. They appear here as they are spawned.</div>
+    <div id="tools"><button id="zin" aria-label="Zoom in" title="Zoom in">+</button><button id="zout" aria-label="Zoom out" title="Zoom out">&minus;</button><button id="fit" title="Fit the graph to the window and follow it">Fit</button><button id="follow" aria-pressed="true" title="Keep the graph fitted as it grows">Follow: on</button></div>
+  </div>
+  <aside id="details"><p class="muted">Click an agent for its prompt, tool calls, messages and output.</p></aside>
+</main>
+<footer>
+  <nav role="tablist">
+    <button role="tab" data-tab="timeline" aria-selected="true">Timeline</button>
+    <button role="tab" data-tab="transcript" aria-selected="false">Transcript</button>
+    <button role="tab" data-tab="files" aria-selected="false">Files</button>
+    <input id="filter" placeholder="Filter transcript" aria-label="Filter transcript" hidden>
+  </nav>
+  <div class="tab" id="timeline"></div>
+  <div class="tab" id="transcript" hidden></div>
+  <div class="tab" id="files" hidden></div>
+</footer>
+<script>
+'use strict'
+const NS = 'http://www.w3.org/2000/svg'
+const COLOR = { running: '#3b82f6', pending: '#9ca3af', waiting: '#a855f7', idle: '#a855f7', completed: '#22c55e', failed: '#ef4444', killed: '#ef4444', session: '#3b82f6' }
+const LIVE = new Set(['running', 'pending', 'waiting', 'idle'])
+const W = 240, H = 66, CHIP_H = 20, COL = 330, ROW = 118, CHIPS = 5
+const $ = id => document.getElementById(id)
+const el = (tag, attrs = {}, text) => {
+  const e = tag.includes(':') || ['g', 'rect', 'text', 'path', 'circle', 'line', 'svg', 'title'].includes(tag) ? document.createElementNS(NS, tag) : document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v)
+  if (text !== undefined) e.textContent = text
+  return e
+}
+const clip = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '')
+const short = m => (m || '').replace(/^claude-/, '')
+const secs = ms => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s` }
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+let snap = null, lastSeq = -1, sel = 'main', pos = new Map(), es = null, follow = true
+// Per shown agent: its element, displayed x/y/scale/opacity and their targets.
+const cards = new Map(), edgeEls = new Map()
+// The camera eases from view toward goal every frame.
+let view = { x: 40, y: 40, k: 1 }, goal = { ...view }
+
+// --- sessions ---------------------------------------------------------------
+const params = new URLSearchParams(location.search)
+async function loadSessions() {
+  const list = await fetch('/sessions').then(r => r.json()).catch(() => [])
+  const pick = $('session'), want = params.get('session') || pick.value
+  pick.replaceChildren(...list.map(s => el('option', { value: s.id }, `${s.cwd.split(/[\\/]/).pop()} · ${s.id.slice(0, 8)} · ${s.agents} agents · ${new Date(s.updatedAt).toLocaleTimeString()}`)))
+  if (want && list.some(s => s.id === want)) pick.value = want
+  return pick.value
+}
+function connect(id) {
+  if (es) es.close()
+  snap = null; lastSeq = -1; sel = 'main'; pos = new Map()
+  $('nodes').replaceChildren(); $('edges').replaceChildren(); cards.clear(); edgeEls.clear()
+  if (!id) return
+  params.set('session', id); history.replaceState(null, '', '?' + params)
+  es = new EventSource('/stream?session=' + encodeURIComponent(id))
+  es.onopen = () => setLive(true)
+  es.onerror = () => setLive(false)
+  es.onmessage = m => { try { apply(JSON.parse(m.data)) } catch (err) { console.error(err) } }
+}
+function setLive(on) { $('live').classList.toggle('on', on); $('live').lastElementChild.textContent = on ? 'live' : 'reconnecting' }
+$('session').onchange = e => connect(e.target.value)
+
+// --- layout -------------------------------------------------------------------
+// Finished agents stay on the graph for LINGER ms (their return pulse plays), then
+// leave it; an agent with a live descendant stays so the tree keeps its shape.
+// Timeline, Transcript and the details panel keep them all.
+const LINGER = 6000
+function shown(f, now) {
+  const keep = new Set(['main'])
+  const parentOf = new Map(f.nodes.map(n => [n.id, n.parent]))
+  for (const n of f.nodes) {
+    if (!LIVE.has(n.status) && now - (n.endedAt || 0) > LINGER) continue
+    for (let id = n.id; id && !keep.has(id); id = parentOf.get(id)) keep.add(id)
+  }
+  return f.nodes.filter(n => keep.has(n.id))
+}
+// Each agent's children sit to its right in columns of at most PER_COL, the
+// columns side by side, so a wide fan-out spreads across the stage instead of
+// one tall column. A column is as wide as its widest child's own subtree. An edge
+// to a child past the first column runs along a bus above the children and drops
+// down the gap before its column, so it never crosses a card.
+const NH = H + 8 + CHIP_H, GY = 26, GX = 80, GC = 56, PER_COL = 3
+function layout(list) {
+  const ids = new Set(list.map(n => n.id))
+  const kids = new Map(list.map(n => [n.id, []]))
+  for (const n of list) if (n.id !== 'main') kids.get(ids.has(n.parent) ? n.parent : 'main').push(n.id)
+  const size = new Map()
+  const measure = id => {
+    const c = kids.get(id) || [], cols = []
+    for (let i = 0; i < c.length; i += PER_COL) cols.push(c.slice(i, i + PER_COL))
+    const info = cols.map(col => {
+      const s = col.map(measure)
+      return { col, w: Math.max(...s.map(z => z.w)), h: s.reduce((t, z) => t + z.h, 0) + GY * (col.length - 1) }
+    })
+    const bw = info.reduce((t, c, j) => t + c.w + (j ? GC : 0), 0), bh = Math.max(0, ...info.map(c => c.h))
+    const s = { w: W + (info.length ? GX + bw : 0), h: Math.max(NH, bh), bh, info }
+    size.set(id, s)
+    return s
+  }
+  measure('main')
+  const out = new Map()
+  // y is the top of the box the subtree gets; the card sits at its middle.
+  const place = (id, x, y, meta) => {
+    const s = size.get(id), cy = y + (s.h - NH) / 2
+    out.set(id, { x, y: cy, ...meta })
+    const top = y + (s.h - s.bh) / 2
+    let cx = x + W + GX
+    s.info.forEach((c, j) => {
+      let ky = top + (s.bh - c.h) / 2
+      for (const k of c.col) { place(k, cx, ky, { parent: id, col: j, bus: top - GY / 2 - cy }); ky += size.get(k).h + GY }
+      cx += c.w + GC
+    })
+  }
+  place('main', 0, 0, {})
+  return out
+}
+
+// --- drawing -------------------------------------------------------------------
+const byId = id => snap.flow.nodes.find(n => n.id === id)
+const labelOf = id => byId(id)?.label ?? id
+// Parent a to child b, from their displayed positions; m is b's layout entry.
+function edgePath(a, b, m) {
+  const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2
+  if (!m || !m.col) { const mx = (x1 + x2) / 2; return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}` }
+  const bx = x1 + GX / 2, by = a.y + m.bus, lx = x2 - GC / 2
+  return rounded([[x1, y1], [bx, y1], [bx, by], [lx, by], [lx, y2], [x2, y2]], 14)
+}
+// A path through axis-aligned points with rounded corners.
+function rounded(pts, r) {
+  let d = `M${pts[0][0]},${pts[0][1]}`
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1]
+    const q = Math.min(r, Math.hypot(x - px, y - py) / 2, Math.hypot(nx - x, ny - y) / 2)
+    d += ` L${x - Math.sign(x - px) * q},${y - Math.sign(y - py) * q} Q${x},${y} ${x + Math.sign(nx - x) * q},${y + Math.sign(ny - y) * q}`
+  }
+  const [lx, ly] = pts[pts.length - 1]
+  return `${d} L${lx},${ly}`
+}
+// Any two cards: an arc between their centres (messages between non-parents).
+function arcPath(a, b) {
+  const x1 = a.x + W / 2, y1 = a.y + H / 2, x2 = b.x + W / 2, y2 = b.y + H / 2
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1
+  const cx = (x1 + x2) / 2 - dy / len * 60, cy = (y1 + y2) / 2 + dx / len * 60
+  return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`
+}
+// The newest tool calls of each agent, with their results.
+function chipsOf(f) {
+  const res = new Map(f.events.filter(e => e.kind === 'result').map(e => [e.ref, e]))
+  const by = new Map()
+  for (const e of f.events) if (e.kind === 'tool') (by.get(e.agent) || by.set(e.agent, []).get(e.agent)).push({ ...e, res: res.get(e.seq) })
+  for (const [k, v] of by) by.set(k, v.slice(-CHIPS))
+  return by
+}
+const CW = (W - 4 * (CHIPS - 1)) / CHIPS
+const detach = x => x.parentNode && x.parentNode.removeChild(x)
+
+function newCard(n, p) {
+  const g = el('g', { tabindex: 0, role: 'button' })
+  g.append(el('rect', { class: 'halo', x: -1, y: -1, width: W + 2, height: H + 2, rx: 11 }), el('rect', { class: 'box', width: W, height: H }),
+    el('circle', { class: 'dot', cx: 14, cy: 16, r: 5 }), el('text', { x: 26, y: 20, 'font-weight': 600 }),
+    el('text', { class: 'meta', x: 12, y: 38 }), el('text', { class: 'doing', x: 12, y: 55 }), el('title'), el('g', { transform: `translate(0,${H + 8})` }))
+  const id = n.id
+  g.onclick = () => select(id)
+  g.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(id) } }
+  $('nodes').append(g)
+  // A new agent grows out of the card that spawned it.
+  const from = cards.get(p.parent)
+  const c = { g, x: from ? from.x : p.x, y: from ? from.y : p.y, s: 0.2, o: 0, status: n.status }
+  cards.set(id, c)
+  return c
+}
+
+function draw(fresh) {
+  const f = snap.flow, now = Date.now()
+  const list = shown(f, now)
+  pos = layout(list)
+  $('empty').hidden = list.length > 1
+  $('empty').textContent = f.nodes.length > 1 ? 'No agents running. Finished ones are in the Timeline and Transcript.' : 'No agents yet in this session. They appear here as they are spawned.'
+  // Cards that left the graph shrink and fade; the frame loop removes them.
+  for (const [id, c] of cards) if (!pos.has(id) && !c.leaving) { c.leaving = true; c.to = 0; c.ts = 0.6; c.g.style.pointerEvents = 'none' }
+  const chips = chipsOf(f)
+  for (const n of list) {
+    const p = pos.get(n.id)
+    const c = cards.get(n.id) || newCard(n, p)
+    const live = LIVE.has(n.status) || n.id === 'main'
+    if (c.leaving) { c.leaving = false; c.g.style.pointerEvents = '' }
+    Object.assign(c, { tx: p.x, ty: p.y, ts: 1, to: live ? 1 : 0.55, meta: p })
+    const run = snap.runs[n.id], color = COLOR[n.status] || '#6b7280'
+    const [halo, box, dot, name, metaT, doingT, title, chipG] = c.g.children
+    const meta = [n.type, run && `${short(run.model)} ${run.effort || ''}`.trim(), run && `$${run.usd.toFixed(2)}`, secs((n.endedAt || now) - n.startedAt)].filter(Boolean).join(' · ')
+    const line = n.doing || (n.output ? n.output.replace(/\s+/g, ' ') : n.status)
+    // One burst of the halo when a live agent finishes.
+    const flash = c.status !== n.status && LIVE.has(c.status) && !live
+    c.status = n.status
+    if (flash) { c.flashUntil = now + 1000; setTimeout(() => draw(new Set()), 1050) }
+    c.g.setAttribute('class', 'card' + (live ? ' live' : ' ended') + (n.id === sel ? ' sel' : '') + (c.flashUntil > now ? ' flash' : ''))
+    c.g.setAttribute('aria-label', `${n.label}, ${n.status}`)
+    halo.setAttribute('stroke', color)
+    box.setAttribute('stroke', color)
+    box.style.filter = live && !reduced ? `drop-shadow(0 0 6px ${color}66)` : ''
+    dot.setAttribute('fill', color)
+    name.textContent = clip(n.label, 28)
+    metaT.textContent = clip(meta, 40)
+    doingT.textContent = clip(line, 40)
+    title.textContent = `${n.label} · ${n.status}\n${line}`
+    // Chips are kept by their tool call, so a running one keeps pulsing.
+    const want = chips.get(n.id) || [], keep = new Set(want.map(w => String(w.seq)))
+    for (const x of [...chipG.children]) if (!keep.has(x.dataset.seq)) detach(x)
+    want.forEach((w, i) => {
+      let ch = chipG.querySelector(`[data-seq="${w.seq}"]`)
+      if (!ch) {
+        ch = el('g', { id: 'c-' + w.seq, 'data-seq': w.seq })
+        ch.append(el('rect', { width: CW, height: CHIP_H }), el('text', { x: 6, y: 14 }, clip(w.tool, 9)), el('title'))
+        chipG.append(ch)
+      }
+      ch.dataset.i = i
+      ch.setAttribute('class', 'chip' + (w.res ? '' : ' run') + (fresh.has(w.seq) ? ' new' : ''))
+      ch.setAttribute('transform', `translate(${i * (CW + 4)},0)`)
+      ch.firstChild.setAttribute('fill', !w.res ? '#1e3a8a55' : '#151a22')
+      ch.firstChild.setAttribute('stroke', !w.res ? '#3b82f6' : w.res.ok ? '#2f6f46' : '#ef4444')
+      ch.lastChild.textContent = `${w.text}${w.res ? `\n${w.res.ok ? 'ok' : 'failed'} · ${w.res.ms} ms` : '\nrunning'}`
+    })
+    // The edge from its parent, with a current while it runs.
+    if (n.id !== 'main') {
+      let e = edgeEls.get(n.id)
+      if (!e) { e = el('g'); e.append(el('path', { class: 'edge' }), el('path', { class: 'edge-flow' })); $('edges').append(e); edgeEls.set(n.id, e) }
+      e.lastChild.setAttribute('class', 'edge-flow' + (live ? ' on' : ''))
+      e.lastChild.setAttribute('stroke', color)
+    }
+  }
+  if (follow) fit()
+  moved = true
+}
+
+// --- the frame loop: cards, edges and camera ease toward their targets --------
+let moved = true, lastT = performance.now()
+const near = (a, b) => Math.abs(a - b) < 0.05
+function frame(t) {
+  const a = reduced ? 1 : 1 - Math.exp(-Math.min(100, t - lastT) / 150)
+  lastT = t
+  let any = moved
+  moved = false
+  for (const [id, c] of cards) {
+    if (near(c.x, c.tx) && near(c.y, c.ty) && Math.abs(c.s - c.ts) < 0.002 && Math.abs(c.o - c.to) < 0.002) continue
+    any = true
+    c.x += (c.tx - c.x) * a; c.y += (c.ty - c.y) * a; c.s += (c.ts - c.s) * a; c.o += (c.to - c.o) * a
+    if (c.leaving && c.o < 0.03) {
+      detach(c.g); cards.delete(id)
+      const e = edgeEls.get(id); if (e) { detach(e); edgeEls.delete(id) }
+      continue
+    }
+    c.g.setAttribute('transform', `translate(${c.x + W / 2 * (1 - c.s)},${c.y + H / 2 * (1 - c.s)}) scale(${c.s})`)
+    c.g.style.opacity = c.o
+  }
+  if (any) for (const [id, e] of edgeEls) {
+    const c = cards.get(id), p = c && cards.get(c.meta.parent)
+    if (!c || !p) { e.style.opacity = 0; continue }
+    const d = edgePath(p, c, c.meta)
+    e.firstChild.setAttribute('d', d); e.lastChild.setAttribute('d', d)
+    e.style.opacity = Math.min(c.o, p.o)
+  }
+  if (!(near(view.x, goal.x) && near(view.y, goal.y) && Math.abs(view.k - goal.k) < 0.0005)) {
+    view = { x: view.x + (goal.x - view.x) * a, y: view.y + (goal.y - view.y) * a, k: view.k + (goal.k - view.k) * a }
+    applyView()
+  }
+  requestAnimationFrame(frame)
+}
+requestAnimationFrame(frame)
+
+// --- event pulses: a glowing comet runs along the path of each new event -------
+const ease = k => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2)
+// path() gives the route from the displayed positions each frame, so a pulse
+// follows a card that is still moving.
+function pulse(path, color, ms = 700, r = 5, back = false, ripple = false) {
+  if (reduced) return
+  const tail = el('path', { fill: 'none', stroke: color, 'stroke-width': r * 0.9, 'stroke-linecap': 'round', filter: 'url(#glow)' })
+  const dots = [0, 1, 2].map(i => el('circle', { r: r * (1 - i * 0.25), fill: color, opacity: 1 - i * 0.3 }))
+  dots[0].setAttribute('filter', 'url(#glow)')
+  $('fx').append(tail, ...dots)
+  const t0 = performance.now()
+  const step = t => {
+    const d = path()
+    if (!d) { [tail, ...dots].forEach(detach); return }
+    tail.setAttribute('d', d)
+    const len = tail.getTotalLength(), k = Math.min(1, (t - t0) / ms), e = ease(k), L = Math.min(90, len * 0.35)
+    const at = q => tail.getPointAtLength(len * Math.max(0, Math.min(1, back ? 1 - q : q)))
+    dots.forEach((dot, i) => { const pt = at(e - i * 0.035); dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y) })
+    // The tail: one dash of length L that ends at the comet's head.
+    tail.setAttribute('stroke-dasharray', `${L} ${len + L}`)
+    tail.setAttribute('stroke-dashoffset', back ? -len * (1 - e) : L - len * e)
+    tail.setAttribute('stroke-opacity', 0.55 * (1 - k ** 3))
+    if (k < 1) return requestAnimationFrame(step)
+    if (ripple) { const end = at(1); ring(end.x, end.y, color) }
+    ;[tail, ...dots].forEach(detach)
+  }
+  requestAnimationFrame(step)
+}
+// A ring that spreads where a pulse lands.
+function ring(x, y, color) {
+  const c = el('circle', { cx: x, cy: y, r: 4, fill: 'none', stroke: color, 'stroke-width': 2 })
+  $('fx').append(c)
+  const t0 = performance.now()
+  const step = t => {
+    const k = Math.min(1, (t - t0) / 500)
+    c.setAttribute('r', 4 + 22 * ease(k)); c.setAttribute('stroke-opacity', 1 - k)
+    if (k < 1) requestAnimationFrame(step); else detach(c)
+  }
+  requestAnimationFrame(step)
+}
+function animate(ev) {
+  if (!cards.get(ev.agent)) return
+  const link = (parent, child) => () => {
+    const p = cards.get(parent), c = cards.get(child)
+    return p && c && (c.meta.parent === parent ? edgePath(p, c, c.meta) : arcPath(p, c))
+  }
+  if (ev.kind === 'spawn' && cards.get(ev.to)) pulse(link(ev.agent, ev.to), COLOR.running, 900, 6, false, true)
+  else if (ev.kind === 'done' && cards.get(ev.to)) pulse(link(ev.to, ev.agent), COLOR.completed, 900, 6, true, true)
+  else if (ev.kind === 'msg' && cards.get(ev.to)) pulse(() => { const p = cards.get(ev.agent), q = cards.get(ev.to); return p && q && arcPath(p, q) }, '#f59e0b', 1000, 5, false, true)
+  else if (ev.kind === 'tool' || ev.kind === 'result') {
+    const chip = $('c-' + (ev.kind === 'tool' ? ev.seq : ev.ref)); if (!chip) return
+    const i = +chip.dataset.i
+    const d = () => {
+      const c = cards.get(ev.agent); if (!c) return null
+      const sx = c.x + W / 2, sy = c.y + H, cx = c.x + i * (CW + 4) + CW / 2, cy = c.y + H + 8
+      return ev.kind === 'tool' ? `M${sx},${sy} L${cx},${cy}` : `M${cx},${cy} L${sx},${sy}`
+    }
+    pulse(d, ev.kind === 'tool' ? '#93c5fd' : ev.ok ? '#22c55e' : '#ef4444', 450, 3)
+  }
+}
+
+// --- pan and zoom ---------------------------------------------------------------
+// Follow (on by default) keeps the camera easing to fit the graph as it changes;
+// panning or zooming by hand turns it off, Fit turns it back on.
+const stage = $('stage')
+function applyView() {
+  $('world').setAttribute('transform', `translate(${view.x},${view.y}) scale(${view.k})`)
+  stage.style.backgroundSize = `${24 * view.k}px ${24 * view.k}px`
+  stage.style.backgroundPosition = `${view.x}px ${view.y}px`
+}
+function fit(instant) {
+  if (!pos.size) return
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const p of pos.values()) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x + W)
+    minY = Math.min(minY, p.y + Math.min(0, p.bus ?? 0) - 20); maxY = Math.max(maxY, p.y + NH)
+  }
+  const r = stage.getBoundingClientRect(), pad = 50
+  const k = Math.max(0.15, Math.min(1.1, (r.width - pad * 2) / (maxX - minX), (r.height - pad * 2) / (maxY - minY)))
+  goal = { k, x: (r.width - (maxX - minX) * k) / 2 - minX * k, y: (r.height - (maxY - minY) * k) / 2 - minY * k }
+  if (instant) { view = { ...goal }; applyView() }
+}
+function setFollow(on) { follow = on; $('follow').textContent = `Follow: ${on ? 'on' : 'off'}`; $('follow').setAttribute('aria-pressed', on) }
+// Zoom by f about the point (mx, my) of the stage.
+function zoomAt(mx, my, f) {
+  setFollow(false)
+  const k = Math.max(0.15, Math.min(3, goal.k * f))
+  goal = { k, x: mx - (mx - goal.x) * k / goal.k, y: my - (my - goal.y) * k / goal.k }
+}
+const middle = () => { const r = stage.getBoundingClientRect(); return [r.width / 2, r.height / 2] }
+$('fit').onclick = () => { setFollow(true); fit() }
+$('follow').onclick = () => { setFollow(!follow); if (follow) fit() }
+$('zin').onclick = () => zoomAt(...middle(), 1.25)
+$('zout').onclick = () => zoomAt(...middle(), 0.8)
+stage.addEventListener('wheel', e => {
+  e.preventDefault()
+  const r = stage.getBoundingClientRect()
+  zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015))
+}, { passive: false })
+let drag = null
+stage.addEventListener('pointerdown', e => { if (e.target.closest('.card, button')) return; drag = { x: e.clientX, y: e.clientY, vx: goal.x, vy: goal.y }; stage.classList.add('drag'); stage.setPointerCapture(e.pointerId) })
+stage.addEventListener('pointermove', e => {
+  if (!drag) return
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y
+  if (follow && Math.hypot(dx, dy) < 4) return
+  setFollow(false)
+  goal = { ...goal, x: drag.vx + dx, y: drag.vy + dy }
+  view = { ...view, x: goal.x, y: goal.y, k: goal.k }
+  applyView()
+})
+stage.addEventListener('pointerup', () => { drag = null; stage.classList.remove('drag') })
+addEventListener('resize', () => follow && fit())
+
+// --- details ------------------------------------------------------------------
+function select(id) { sel = id; draw(new Set()); details() }
+function section(title, ...children) { const s = document.createDocumentFragment(); s.append(el('h3', {}, title), ...children); return s }
+function details() {
+  const n = snap && byId(sel), box = $('details')
+  if (!n) { box.replaceChildren(el('p', { class: 'muted' }, 'Click an agent for its prompt, tool calls, messages and output.')); return }
+  const f = snap.flow, run = snap.runs[n.id], now = Date.now()
+  const parts = [el('h2', { style: `color:${COLOR[n.status] || 'inherit'}` }, n.label),
+    el('div', { class: 'muted' }, `${n.type} · ${n.status} · ${secs((n.endedAt || now) - n.startedAt)}${n.id !== 'main' ? ` · spawned by ${labelOf(n.parent)}` : ''}`)]
+  if (run) parts.push(el('div', { class: 'muted' }, `${run.model} · ${run.effort || 'no effort'} · in ${run.inTok.toLocaleString()} · out ${run.outTok.toLocaleString()} · $${run.usd.toFixed(3)}`))
+  if (n.doing) parts.push(section('Doing now', el('pre', {}, n.doing)))
+  if (n.prompt) parts.push(section('Prompt', el('pre', {}, n.prompt)))
+  const res = new Map(f.events.filter(e => e.kind === 'result').map(e => [e.ref, e]))
+  const tools = f.events.filter(e => e.kind === 'tool' && e.agent === n.id).slice(-25).reverse()
+  if (tools.length) parts.push(section(`Tool calls (latest ${tools.length})`, ...tools.map(t => {
+    const r = res.get(t.seq)
+    const row = el('div', { class: 'row' }); row.append(el('span', { title: t.text }, t.text), el('span', { class: r ? (r.ok ? 'muted' : 'k-err') : 'k-spawn' }, r ? (r.ok ? `${r.ms} ms` : 'failed') : 'running'))
+    return row
+  })))
+  const msgs = f.events.filter(e => e.kind === 'msg' && (e.agent === n.id || e.to === n.id)).slice(-10)
+  if (msgs.length) parts.push(section('Messages', ...msgs.map(m => el('pre', {}, `${m.agent === n.id ? 'to ' + labelOf(m.to) : 'from ' + labelOf(m.agent)}: ${m.text}`))))
+  parts.push(section('Output', n.output ? el('pre', {}, n.output) : el('div', { class: 'muted' }, 'No output yet.')))
+  box.replaceChildren(...parts)
+}
+
+// --- footer tabs -----------------------------------------------------------
+let tab = 'timeline'
+document.querySelectorAll('footer nav [role=tab]').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab
+  document.querySelectorAll('footer nav [role=tab]').forEach(x => x.setAttribute('aria-selected', x === b))
+  document.querySelectorAll('.tab').forEach(t => t.hidden = t.id !== tab)
+  $('filter').hidden = tab !== 'transcript'
+  footer()
+})
+$('filter').oninput = () => footer()
+
+function timeline() {
+  const f = snap.flow, now = Date.now(), rows = f.nodes
+  const t0 = Math.min(...rows.map(n => n.startedAt)), span = Math.max(1000, now - t0)
+  const box = $('timeline'), width = Math.max(400, box.clientWidth - 24), LABEL = 160, RH = 20
+  const x = t => LABEL + (t - t0) / span * (width - LABEL - 10)
+  const svg = el('svg', { width, height: rows.length * RH + 24, role: 'img', 'aria-label': 'Timeline of agents and their tool calls' })
+  const row = new Map(rows.map((n, i) => [n.id, i]))
+  rows.forEach((n, i) => {
+    const y = i * RH + 4
+    svg.append(el('text', { x: 0, y: y + 12, fill: '#8b93a1', 'font-size': 11 }, clip(n.label, 24)))
+    const bar = el('rect', { x: x(n.startedAt), y: y + 3, width: Math.max(2, x(n.endedAt || now) - x(n.startedAt)), height: 12, rx: 3, fill: COLOR[n.status] || '#6b7280', opacity: 0.35 })
+    bar.append(el('title', {}, `${n.label}: ${secs((n.endedAt || now) - n.startedAt)}`))
+    svg.append(bar)
+  })
+  const res = new Map(f.events.filter(e => e.kind === 'result').map(e => [e.ref, e]))
+  for (const e of f.events) {
+    const i = row.get(e.agent); if (i === undefined) continue
+    const y = i * RH + 4
+    if (e.kind === 'tool') {
+      const r = res.get(e.seq), end = r ? r.at : now
+      const t = el('rect', { x: x(e.at), y: y + 5, width: Math.max(2, x(end) - x(e.at)), height: 8, rx: 2, fill: !r ? '#93c5fd' : r.ok ? '#22c55e' : '#ef4444' })
+      t.append(el('title', {}, `${e.text}${r ? ` · ${r.ms} ms` : ' · running'}`))
+      svg.append(t)
+    } else if (e.kind === 'msg' || e.kind === 'spawn') {
+      const c = el('circle', { cx: x(e.at), cy: y + 9, r: 3.5, fill: e.kind === 'msg' ? '#f59e0b' : '#3b82f6' })
+      c.append(el('title', {}, `${e.kind === 'msg' ? 'message to ' : 'spawned '}${labelOf(e.to)}: ${clip(e.text, 200)}`))
+      svg.append(c)
+    }
+  }
+  svg.append(el('text', { x: LABEL, y: rows.length * RH + 20, fill: '#8b93a1', 'font-size': 10 }, new Date(t0).toLocaleTimeString()))
+  svg.append(el('text', { x: width - 60, y: rows.length * RH + 20, fill: '#8b93a1', 'font-size': 10 }, 'now'))
+  box.replaceChildren(svg)
+}
+function transcript() {
+  const q = $('filter').value.toLowerCase(), box = $('transcript')
+  const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 4
+  const res = new Map(snap.flow.events.filter(e => e.kind === 'result').map(e => [e.ref, e]))
+  const lines = []
+  for (const e of snap.flow.events) {
+    if (e.kind === 'result') continue
+    const who = labelOf(e.agent)
+    const text = e.kind === 'spawn' ? `spawned ${labelOf(e.to)}: ${e.text}` : e.kind === 'msg' ? `to ${labelOf(e.to)}: ${e.text}` : e.kind === 'done' ? `returned to ${labelOf(e.to)}: ${e.text}` : e.text
+    const r = e.kind === 'tool' && res.get(e.seq)
+    const tail = e.kind === 'tool' ? (r ? (r.ok ? ` (${r.ms} ms)` : ' (failed)') : ' (running)') : ''
+    const all = `${who} ${text}${tail}`
+    if (q && !all.toLowerCase().includes(q)) continue
+    const d = el('div', { title: all })
+    d.append(el('span', { class: 'muted' }, new Date(e.at).toLocaleTimeString() + ' '), el('b', {}, who + ' '), el('span', { class: r && !r.ok ? 'k-err' : 'k-' + e.kind }, text + tail))
+    d.onclick = () => select(e.agent)
+    lines.push(d)
+  }
+  box.replaceChildren(...lines)
+  if (stick) box.scrollTop = box.scrollHeight
+}
+function files() {
+  const list = Object.entries(snap.flow.files).sort((a, b) => b[1].r + b[1].w - (a[1].r + a[1].w))
+  const max = Math.max(1, ...list.map(([, v]) => v.r + v.w))
+  const box = $('files')
+  if (!list.length) { box.replaceChildren(el('p', { class: 'muted' }, 'No files read or edited yet.')); return }
+  box.replaceChildren(...list.map(([p, v]) => {
+    const row = el('div', { class: 'file' }), bar = el('div', { class: 'bar', title: `${v.r} reads, ${v.w} writes` })
+    bar.append(el('div', { class: 'r', style: `width:${v.r / max * 100}%` }), el('div', { class: 'w', style: `width:${v.w / max * 100}%` }))
+    row.append(el('span', { title: p }, p), bar, el('span', { class: 'muted' }, `${v.r}r ${v.w}w`))
+    return row
+  }))
+}
+function footer() { if (!snap) return; ({ timeline, transcript, files })[tab]() }
+
+// --- applying a snapshot ----------------------------------------------------
+function apply(s) {
+  const first = !snap
+  snap = s
+  const f = s.flow
+  const live = f.nodes.filter(n => n.id !== 'main' && LIVE.has(n.status)).length
+  const done = f.nodes.filter(n => n.status === 'completed').length
+  const failed = f.nodes.filter(n => n.status === 'failed' || n.status === 'killed').length
+  const cost = Object.values(s.runs).reduce((t, r) => t + r.usd, 0)
+  $('summary').textContent = `${live} running · ${done} done · ${failed} failed · $${cost.toFixed(2)} · ${s.session.cwd}`
+  // Events already shown on first load are not replayed; later ones animate.
+  const fresh = first ? [] : f.events.filter(e => e.seq > lastSeq)
+  lastSeq = f.seq
+  draw(new Set(fresh.map(e => e.seq)))
+  if (first) fit(true)
+  fresh.slice(-30).forEach((e, i) => setTimeout(() => animate(e), i * 60))
+  if (!byId(sel)) sel = 'main'
+  details()
+  footer()
+  background()
+}
+
+// --- left pane: background tasks (shells, monitors, workflows) ---------------
+const KIND = { shell: 'shell', monitor: 'monitor', workflow: 'workflow' }
+function background() {
+  const tasks = snap.flow.tasks || [], now = Date.now()
+  const running = tasks.filter(t => t.status === 'running').reverse()
+  const ended = tasks.filter(t => t.status !== 'running').reverse()
+  $('bgcount').textContent = running.length ? `${running.length} running` : ''
+  const row = t => {
+    const color = t.status === 'running' ? COLOR.running : t.status === 'completed' ? COLOR.completed : t.status === 'ended' ? COLOR.pending : COLOR.failed
+    const how = t.status === 'ended' ? 'ended with its agent, outcome not reported' : t.status
+    const d = el('div', { class: 'task' + (t.status === 'running' ? '' : ' ended'), role: 'button', tabindex: 0, title: `${t.label}\nstarted by ${labelOf(t.agent)} · ${how}` })
+    const top = el('div', { class: 'task-top' })
+    top.append(el('i', { style: `background:${color}` }), el('span', { class: 'kind' }, KIND[t.kind] || t.kind), el('span', { class: 'muted' }, secs((t.endedAt || now) - t.startedAt)))
+    d.append(top, el('div', { class: 'task-label' }, t.label), el('div', { class: 'muted' }, `by ${labelOf(t.agent)}${t.status === 'running' ? '' : ' · ' + how}`))
+    d.onclick = () => select(t.agent)
+    d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(t.agent) } }
+    return d
+  }
+  const parts = running.length ? running.map(row) : [el('p', { class: 'muted' }, 'Nothing running in the background.')]
+  if (ended.length) parts.push(el('h3', {}, 'Finished'), ...ended.map(row))
+  $('bglist').replaceChildren(...parts)
+}
+// Durations and the timeline move without events.
+setInterval(() => { if (snap) { draw(new Set()); footer(); background() } }, 2000)
+setInterval(async () => { const cur = $('session').value; await loadSessions(); $('session').value = cur }, 15000)
+loadSessions().then(connect)
+</script>
+</body>
+</html>

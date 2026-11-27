@@ -1,0 +1,13 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "agent-flow",
+  "description": "A live graph of your Claude Code agents in the browser",
+  "owner": { "name": "Michael Buxton", "url": "https://github.com/scddesign-dev" },
+  "plugins": [
+    {
+      "name": "agent-flow",
+      "description": "A live graph of your Claude Code agents in the browser: who spawned whom, tool calls, messages, background tasks, timeline and file heatmap",
+      "source": "./"
+    }
+  ]
+}
