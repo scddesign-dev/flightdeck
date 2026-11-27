@@ -131,7 +131,8 @@ export function setStatuses(f: Flow, list: readonly { id: string; status: string
   let changed = false
   const nodes = f.nodes.map(n => {
     const listed = by.get(n.id)
-    const s = listed === 'idle' && n.output !== undefined ? 'completed' : listed
+    // Listed idle, or dropped from the list while idle: an answered agent is finished.
+    const s = (listed ?? n.status) === 'idle' && n.output !== undefined ? 'completed' : listed
     if (!s || s === n.status) return n
     changed = true
     return { ...n, status: s, endedAt: LIVE.has(s) ? undefined : (n.endedAt ?? now) }

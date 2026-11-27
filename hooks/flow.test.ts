@@ -87,6 +87,8 @@ test('an agent that answered and sits idle (resumable) counts as finished; resum
   // A snapshot from 0.2.0 holds answered agents stuck at 'idle': the next poll finishes them.
   const stuck: typeof f = { ...f, nodes: f.nodes.map(n => (n.id === 'a' ? { ...n, status: 'idle', endedAt: undefined } : n)) }
   expect(setStatuses(stuck, [{ id: 'a', status: 'idle' }], 6).nodes[1]).toMatchObject({ status: 'completed', endedAt: 6 })
+  // ...and so does one the agent list has since dropped.
+  expect(setStatuses(stuck, [], 7).nodes[1]).toMatchObject({ status: 'completed', endedAt: 7 })
 })
 
 test('past the cap the oldest finished agents leave, never main or live ones', () => {
